@@ -1,0 +1,82 @@
+```{r}
+setwd("C:/Users/Bryan/OneDrive/MADS/503_Applied Predictive Modeling/finalproject/data/")
+# CSV Upload
+met_21_22 = read.csv("met_21_22_9755371.csv")
+met_22_23 = read.csv('met_22_23_9755371.csv')
+wl_21_23 = read.csv('wl_21_23_9755371.csv')
+pacIOOS_21_22 = read.csv('dhw_5km_6a81_de46_d4a4.csv')
+pacIOOS_22_23 = read.csv('dhw_5km_db8d_5daf_80ed.csv')
+```
+```{r}
+# Combine years for meteorological & coral tables
+library('dplyr')
+met21_23 = bind_rows(met_21_22, met_22_23)
+coral21_23 = bind_rows(pacIOOS_21_22, pacIOOS_22_23)
+```
+```{r}
+# Examine the meteorological tables
+dim(met21_23)
+colnames(met21_23)
+str(met21_23)
+```
+```{r}
+# Examine the water level table
+dim(wl_21_23)
+colnames(wl_21_23)
+str(wl_21_23)
+```
+```{r}
+# Examine the coral data
+dim(coral21_23)
+colnames(coral21_23)
+str(coral21_23)
+```
+```{r}
+# Convert coral table column names to lowercase
+names(coral21_23) = tolower(names(coral21_23))
+coral21_23
+```
+```{r}
+# Convert datetime columns for coral, meteorological, and water level to a standard date format. YYYY-MM-DD
+## The coral timestamp field marks 6 data points at the beginning of each day.
+### Extracting date from timestamp column
+# coral21_23$date = format(as.POSIXct(coral21_23$time),  
+#                          format="%Y-%m-%d")
+met21_23$date = format(met21_23$date, "%Y-%m-%d")
+wl21_23$date = format(wl21_23$date, "%Y-%m-%d")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
