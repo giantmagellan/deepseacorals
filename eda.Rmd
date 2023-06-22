@@ -1,5 +1,5 @@
 ```{r}
-setwd("C:/Users/Bryan/OneDrive/MADS/503_Applied Predictive Modeling/finalproject/data/")
+setwd("C:/Users/Rudy/OneDrive/MADS/503_Applied Predictive Modeling/finalproject/data/")
 # CSV Upload
 met_21_22 = read.csv("met_21_22_9755371.csv")
 met_22_23 = read.csv('met_22_23_9755371.csv')
@@ -37,15 +37,42 @@ names(coral21_23) = tolower(names(coral21_23))
 coral21_23
 ```
 ```{r}
-# Convert datetime columns for coral, meteorological, and water level to a standard date format. YYYY-MM-DD
+# Convert coral datetime column to a standard date format. YYYY-MM-DD
 ## The coral timestamp field marks 6 data points at the beginning of each day.
 ### Extracting date from timestamp column
-# coral21_23$date = format(as.POSIXct(coral21_23$time),  
-#                          format="%Y-%m-%d")
-met21_23$date = format(met21_23$date, "%Y-%m-%d")
-wl21_23$date = format(wl21_23$date, "%Y-%m-%d")
+coral21_23$date = format(as.POSIXct(coral21_23$time), format="%Y-%m-%d")
 ```
 
+There are now 3 tables each span 2021 through 2023 with a standard date format.
+
+```{r}
+# Count total missing values in each column of data frame
+## Coral
+sapply(coral21_23, function(x) sum(is.na(x)))
+## Meteorological
+sapply(met21_23, function(x) sum(is.na(x)))
+## Water Level
+sapply(wl_21_23, function(x) sum(is.na(x)))
+```
+```{r}
+
+```
+
+There are no missing values in any of the tables. 
+---
+All Coral _mask suffix columns contain only zeros and will be dropped from the data frame since we cannot confirm whether this an accurate or a missed reading based on the information provided from its source.
+
+Coral columns to be dropped: crw_baa_mask, crw_dhw_mask, crw_hotspot_mask, and crw_ssanomaly_mask
+---
+The meteorological data contains 5 columns with not null empty values and shall be dropped.
+
+Meteorological columns to be dropped: wind_speed, wind_direction, wind_gust, humidity, and visibility
+---
+The Water Level (WL) inf column contains no information and shall be dropped.
+
+```{r}
+# Dropping empty columns from each table
+```
 
 
 
