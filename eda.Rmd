@@ -1,12 +1,21 @@
 ```{r}
 setwd("C:/Users/Rudy/OneDrive/MADS/503_Applied Predictive Modeling/finalproject/data/")
 # CSV Upload
-met_21_22 = read.csv("met_21_22_9755371.csv")
-met_22_23 = read.csv('met_22_23_9755371.csv')
-wl_21_23 = read.csv('wl_21_23_9755371.csv')
-pacIOOS_21_22 = read.csv('dhw_5km_6a81_de46_d4a4.csv')
-pacIOOS_22_23 = read.csv('dhw_5km_db8d_5daf_80ed.csv')
+met_21_22 = read.csv("met_21_22_9755371.csv", header=TRUE, stringsAsFactors=FALSE)
+met_22_23 = read.csv('met_22_23_9755371.csv', header=TRUE, stringsAsFactors = FALSE)
+wl_21_23 = read.csv('wl_21_23_9755371.csv', header=TRUE, stringsAsFactors = FALSE)
+pacIOOS_21_22 = read.csv('dhw_5km_6a81_de46_d4a4.csv', header=TRUE, stringsAsFactors = FALSE)
+pacIOOS_22_23 = read.csv('dhw_5km_db8d_5daf_80ed.csv', header=TRUE, stringsAsFactors = FALSE)
 ```
+```{r}
+# Examine the input table structures
+str(met_21_22)
+str(met_22_23)
+str(wl_21_23)
+str(pacIOOS_21_22)
+str(pacIOOS_22_23)
+```
+
 ```{r}
 # Combine years for meteorological & coral tables
 library('dplyr')
@@ -54,24 +63,45 @@ sapply(met21_23, function(x) sum(is.na(x)))
 ## Water Level
 sapply(wl_21_23, function(x) sum(is.na(x)))
 ```
-```{r}
-
-```
 
 There are no missing values in any of the tables. 
 ---
-All Coral _mask suffix columns contain only zeros and will be dropped from the data frame since we cannot confirm whether this an accurate or a missed reading based on the information provided from its source.
+All Coral _mask suffix columns contain only zeros and will be dropped from the data frame since we cannot confirm whether this an accurate or a missed reading based on the information provided from its source. The date column was created by removing the timestamp from the time column.
 
-Coral columns to be dropped: crw_baa_mask, crw_dhw_mask, crw_hotspot_mask, and crw_ssanomaly_mask
+Coral columns to be dropped: time, crw_baa_mask, crw_dhw_mask, crw_hotspot_mask, and crw_sst_anomaly_mask
 ---
-The meteorological data contains 5 columns with not null empty values and shall be dropped.
+The meteorological data contains 5 columns with not null empty values and shall be dropped. Time will also be dropped due to an inaccuracy in the mapping with the coral table.
 
-Meteorological columns to be dropped: wind_speed, wind_direction, wind_gust, humidity, and visibility
+Meteorological columns to be dropped: time, wind_speed, wind_direction, wind_gust, humidity, and visibility
 ---
 The Water Level (WL) inf column contains no information and shall be dropped.
 
 ```{r}
 # Dropping empty columns from each table
+coral21_23_sub = subset(coral21_23, select = -c(crw_baa_mask, crw_dhw_mask, crw_hotspot_mask, 
+                                                crw_sstanomaly_mask, time))
+met21_23_sub = subset(met21_23, select = -c(wind_speed, wind_direction, wind_gust, humidity,
+                                            visibility, time))
+wl_21_23_sub = subset(wl_21_23, select = -c(inf))
+```
+
+The coral table has 6 measurements per day with a timestamp of 00:00, which is why it was removed. The meteorological table has 1 measurement per hour per day. Lastly, the water level table has 1 measurement per month. 
+
+Coral: This is the central table the meteorological and water level tables will be manipulated for.
+
+Meteor.: The ideal mapping would be to break up the hourly measurements into 6 4-measurement groups. The caveat to this approach in our case is that there is no way to be which order the coral measurements were taken -- simultaneously or sequentially. Therefore, we will use the daily average of air temperature and barometric metric pressure and apply a one-to-many mapping with the coral measurements. Air temperature and barometric pressure will be represented 6 times per day.
+
+Water Level: Apply a one-to-many mapping with the coral table. Each monthly water level measurement will be represented 6 times per day per month.
+
+```{r}
+# Convert air temp & baro columns to numeric
+met21_23_sub = transform(met21_23_sub, air_temp = as.numeric(air_temp), baro = as.numeric(baro))
+```
+
+```{r}
+# Find daily averages: air temperature & barometric pressure
+met21_23_sub_avg = aggregate(met21_23_sub[, 2:3], list(met21_23_sub$date), mean)
+met21_23_sub_avg
 ```
 
 
