@@ -1,3 +1,7 @@
+Bryan Flores
+ADS-503
+Final Project: Exploratory Analysis
+
 ```{r}
 setwd("C:/Users/Rudy/OneDrive/MADS/503_Applied Predictive Modeling/finalproject/data/")
 # CSV Upload
@@ -78,11 +82,11 @@ The Water Level (WL) inf column contains no information and shall be dropped.
 
 ```{r}
 # Dropping empty columns from each table
-coral21_23_sub = subset(coral21_23, select = -c(crw_baa_mask, crw_dhw_mask, crw_hotspot_mask, 
+coral21_23_sub = subset(coral21_23, select = -c(crw_baa_mask, crw_dhw_mask, crw_hotspot_mask,
                                                 crw_sstanomaly_mask, time))
 met21_23_sub = subset(met21_23, select = -c(wind_speed, wind_direction, wind_gust, humidity,
                                             visibility, time))
-wl_21_23_sub = subset(wl_21_23, select = -c(inf))
+wl_21_23_sub = subset(wl_21_23, select = -c(inf, time))
 ```
 
 The coral table has 6 measurements per day with a timestamp of 00:00, which is why it was removed. The meteorological table has 1 measurement per hour per day. Lastly, the water level table has 1 measurement per month. 
@@ -91,17 +95,64 @@ Coral: This is the central table the meteorological and water level tables will 
 
 Meteor.: The ideal mapping would be to break up the hourly measurements into 6 4-measurement groups. The caveat to this approach in our case is that there is no way to be which order the coral measurements were taken -- simultaneously or sequentially. Therefore, we will use the daily average of air temperature and barometric metric pressure and apply a one-to-many mapping with the coral measurements. Air temperature and barometric pressure will be represented 6 times per day.
 
-Water Level: Apply a one-to-many mapping with the coral table. Each monthly water level measurement will be represented 6 times per day per month.
+Water Level: Apply a one-to-many mapping with the coral table. Each monthly water level measurement will be represented 6 times per day per month. Water level measurements were only taken on the first of every month. Therefore, we will have to join on the yyyy-mm of the date column. For simplicity, I will create a new year-month column in each dataframe, then drop it once the merge is complete.
 
 ```{r}
 # Convert air temp & baro columns to numeric
 met21_23_sub = transform(met21_23_sub, air_temp = as.numeric(air_temp), baro = as.numeric(baro))
 ```
-
 ```{r}
 # Find daily averages: air temperature & barometric pressure
 met21_23_sub_avg = aggregate(met21_23_sub[, 2:3], list(met21_23_sub$date), mean)
 met21_23_sub_avg
+```
+```{r}
+# Change new subset column name
+colnames(met21_23_sub_avg) = c('date', 'air_temp', 'baro')
+# Convert air temperature to celcius from fahrenheit
+library(weathermetrics)
+met21_23_sub_avg$air_temp = fahrenheit.to.celsius(met21_23_sub_avg$air_temp, round = 2)
+```
+
+```{r}
+# Map Meteorological to Coral
+coral_met = merge(x = coral21_23_sub, y = met21_23_sub_avg, by="date", all.x=TRUE)
+```
+```{r}
+# Map Water Level to Coral/Met Table
+## Add year-month columns for merging
+coral_met$ym = format(as.Date(coral_met$date), "%Y-%m")
+wl_21_23_sub$ym = format(as.Date(wl_21_23_sub$date), "%Y-%m")
+
+cmw_merged = merge(x = coral_met, y = wl_21_23_sub, by="ym", all.x=TRUE)
+## Dropping year-month column
+cmw_merged = subset(select(cmw_merged, -c(ym, latitude, longitude, date.y)))
+## Rename date column
+colnames(cmw_merged)[1] = "date"
+```
+
+The final set before exploratory analysis and feature selection is cmw_merged. The year-month column, ym, has been removed along with latitude and longitude. Latitude and longitude were necessary in obtaining the data, however, the area of the measurements taken will remain constant over the period of our data set. 
+
+Our final set contains 4386 rows and 19 columns -- 6 measurements per day per month from 5/27/2021 through 5/27/2023. CRW_BAA is the predictor column is the bleaching alert area containing 5 classes: 0 for no stress, 1 for bleaching watch, 2 for bleaching warning, 3 for bleaching alert level 1, and 4 for bleaching alert level 2. 
+
+--- 
+EXPLORATORY ANALYSIS
+
+```{r}
+# library(tidyverse)
+library(ggplot2)
+# Distribution of the bleaching hotspot
+hist(cmw_merged$crw_hotspot, xlab="Hotspot (Celsius)", main = "Frequency Histogram of Bleaching Hotspot", col = "seagreen3")
+```
+```{r}
+# Distribution of bleaching alert area
+hist(cmw_merged$crw_baa, xlab="Alert Area", main = "Frequency Histogram of Bleaching Alert Area", col = "seagreen3")
+```
+
+```{r}
+# Difference in hotspot temperatures between bleaching alert area classes
+boxplot(crw_hotspot ~ crw_baa, data=cmw_merged, col="salmon", 
+        xlab = "Alert Area", ylab = "Hotspot", main = "Coral Bleaching Hotspot & Alert Area")
 ```
 
 
