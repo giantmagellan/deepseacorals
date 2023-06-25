@@ -130,6 +130,12 @@ cmw_merged = subset(select(cmw_merged, -c(ym, latitude, longitude, date.y)))
 ## Rename date column
 colnames(cmw_merged)[1] = "date"
 ```
+```{r}
+# Storing Final Set as csv
+setwd("C:/Users/Rudy/Desktop/DataScience/deepseacorals/data/")
+write.csv(cmw_merged, "coral_pretrain.csv")
+```
+
 
 The final set before exploratory analysis and feature selection is cmw_merged. The year-month column, ym, has been removed along with latitude and longitude. Latitude and longitude were necessary in obtaining the data, however, the area of the measurements taken will remain constant over the period of our data set. 
 
@@ -137,6 +143,40 @@ Our final set contains 4386 rows and 19 columns -- 6 measurements per day per mo
 
 --- 
 EXPLORATORY ANALYSIS
+```{r}
+# function to count number of missing rows
+countmissing <- function(x) {
+sum(is.na(x))
+}
+# summarize missing data by predictor
+apply(cmw_merged, 2, countmissing)
+```
+There are 348 missing values for each of the water level predictors and 192 missing values for air temperature and barometric pressure. The readings were taken sequentially as our data is a time series data set; the imputeTS library is used to impute each predictors missing values with the moving average. The imputeTS package specializes on (univariate) time series imputation. The moving average was chosen for imputation because water levels in Puerto Rico change with the tides. Puerto Rico experiences consistent but nontrivial tide changes. Peak water levels per month are just under 3 ft, whereas the trough is approximately -0.5 ft. 
+
+The imputeTS function, na_ma, imputes missing values by the weighted moving average. It uses a semi-adaptive window size that ensures all missing values are replaced. In this case, the default exponential moving average (EWMA), which is a recursive function that calculates the current observation with the previous one. EWMA uses weighting factors that decrease exponentially. The na_ma function accepts an integer width of the moving average e.g. k=3, which means the sum of 3 observations to the left and 3 observations to the right of the NA value are taken into account. Additionally, if those 6 total values are also NA, the window is automatically increased until there are at least 3 non-NA values present. We use the default value of k=4. 
+
+```{r}
+# Impute missing values w/ the moving average
+library(imputeTS)
+cmw_merged$air_temp = na_ma(cmw_merged$air_temp)
+cmw_merged$baro = na_ma(cmw_merged$baro)
+cmw_merged$highest = na_ma(cmw_merged$highest)
+cmw_merged$mhhw = na_ma(cmw_merged$mhhw)
+cmw_merged$mhw = na_ma(cmw_merged$mhw)
+cmw_merged$msl = na_ma(cmw_merged$msl)
+cmw_merged$mtl = na_ma(cmw_merged$mtl)
+cmw_merged$mlw = na_ma(cmw_merged$mlw)
+cmw_merged$mllw = na_ma(cmw_merged$mllw)
+cmw_merged$lowest = na_ma(cmw_merged$lowest)
+```
+```{r}
+countmissing <- function(x) {
+sum(is.na(x))
+}
+# Re-count missing values
+apply(cmw_merged, 2, countmissing)
+```
+There are no more missing values in the pre-training set.
 
 ```{r}
 # library(tidyverse)
@@ -155,6 +195,149 @@ boxplot(crw_hotspot ~ crw_baa, data=cmw_merged, col="salmon",
         xlab = "Alert Area", ylab = "Hotspot", main = "Coral Bleaching Hotspot & Alert Area")
 ```
 
+```{r}
+# Distribution of predictors
+ggplot(data=cmw_merged, aes(x=crw_hotspot, group=crw_baa, fill=crw_baa)) +
+    geom_density(adjust=1.5, alpha=.6)
+```
+```{r}
+# Load required library
+library(plotly)
+ 
+# Set discrete predictors as variables
+x1 = cmw_merged$crw_baa
+x2 = cmw_merged$crw_baa_7d_max
+x3 = cmw_merged$crw_baa_7d_max_mask
+
+# Create Plotly figure with multiple histograms
+plot_ly() %>%
+  add_histogram(x = ~x1, name = "Alert Area", nbinsx = 30, opacity = 0.7) %>%
+  add_histogram(x = ~x2, name = "7-Day Max", nbinsx = 30, opacity = 0.7) %>%
+  add_histogram(x = ~x3, name = "7-Day Max Mask", nbinsx = 30, opacity = 0.7) %>%
+  layout(title = "Freq. Distribution of Discrete Predictors",
+         xaxis = list(title = "X Values"),
+         yaxis = list(title = "Frequency"))
+```
+
+Interpretation of discrete predictors: Based on the above plots, there are slightly normal distributions for Alert Area (crw_baa) and 7-Day Max (crw_baa_7d_max). Alternatively, 7-Day Max Mask (crw_baa_7d_max_mask) has a skewed distribution. All of its values cluster at 0. Thus, 7-Day Max Mask will be removed from the dataset.
+
+```{r}
+# Removing 7-Day Max Mask
+cmw_merged = subset(select(cmw_merged, -c(crw_baa_7d_max_mask)))
+```
+
+```{r}
+# Load required library
+library(plotly)
+ 
+# Set continous predictors as variables
+x1 = cmw_merged$crw_dhw
+x2 = cmw_merged$crw_hotspot
+x3 = cmw_merged$crw_sst
+x4 = cmw_merged$crw_sstanomaly
+x5 = cmw_merged$air_temp
+
+# Create Plotly figure with multiple histograms
+plot_ly() %>%
+  add_histogram(x = ~x1, name = "Degree Heat Week", nbinsx = 30, opacity = 0.7) %>%
+  add_histogram(x = ~x2, name = "Hotspot", nbinsx = 30, opacity = 0.7) %>%
+  add_histogram(x = ~x3, name = "Sea Surface Temp", nbinsx = 30, opacity = 0.7) %>%
+  add_histogram(x = ~x4, name = "SST Anomaly", nbinsx = 30, opacity = 0.7) %>%
+  add_histogram(x = ~x5, name = "Air Temp", nbinsx = 30, opacity = 0.7) %>%
+  layout(title = "Freq. Distribution of Coral Reef Predictors",
+         xaxis = list(title = "X Values"),
+         yaxis = list(title = "Frequency"))
+```
+Interpretation of CRW Continuous variables:
+- Degree heat week (crw_dhw), blue, has a skewed distribution. DHW values range between 0 and 100 C. Over the past two years, the measurements cluster heavily at zero and a small portion around the value 2.
+- Hotspot (crw_hotspot), orange, has an approximately normal distribution.
+- SST Anomaly (crw_sstanomaly), red, has a skewed distribution. Though SST Anomaly has a limited range of -15 to 15 degrees Celcius, the majority of the data is centered at 0.5 Celcius. 
+- Sea Surface Temp (crw_sst, green) and Air Temperature (air_temp, purple) have approximately normal distributions.
+
+```{r}
+# Load required library
+library(plotly)
+ 
+# Set continous predictors as variables
+x1 = cmw_merged$highest
+x2 = cmw_merged$mhhw 
+x3 = cmw_merged$mhw 
+x4 = cmw_merged$msl 
+x5 = cmw_merged$mtl 
+x6 = cmw_merged$mlw 
+x7 = cmw_merged$mllw 
+x8 = cmw_merged$lowest 
+
+# Create Plotly figure with multiple histograms
+plot_ly() %>%
+  add_histogram(x = ~x1, name = "Highest", nbinsx = 30, opacity = 0.7) %>%
+  add_histogram(x = ~x2, name = "Mean Higher High Water", nbinsx = 30, opacity = 0.7) %>%
+  add_histogram(x = ~x3, name = "Mean High Water", nbinsx = 30, opacity = 0.7) %>%
+  add_histogram(x = ~x4, name = "Mean Sea Level", nbinsx = 30, opacity = 0.7) %>%
+  add_histogram(x = ~x5, name = "Mean Tide Level", nbinsx = 30, opacity = 0.7) %>%
+  add_histogram(x = ~x3, name = "Mean Low Water", nbinsx = 30, opacity = 0.7) %>%
+  add_histogram(x = ~x4, name = "Mean Lower Low Water", nbinsx = 30, opacity = 0.7) %>%
+  add_histogram(x = ~x5, name = "Trough Water Level", nbinsx = 30, opacity = 0.7) %>%
+  layout(title = "Freq. Distribution of Water Level Predictors",
+         xaxis = list(title = "X Values"),
+         yaxis = list(title = "Frequency"))
+```
+
+All water level variables have approximate normal distributions.
+
+```{r}
+# Boxplots of Coral Reef Watch predictors
+boxplot(subset(select(cmw_merged, c(crw_dhw, crw_hotspot, crw_sst, crw_sstanomaly, air_temp))),
+        main="Coral Reef Watch Boxplots",
+        xlab="Predictors",
+        ylab="Temp (C)")
+```
+Based on the above boxplots, all variables except crw_dhw have a symmetric distribution. The crw_dhw shows a median line at the bottom of the box with no visible lower whisker meaning the distribution is positively skewed. Additionally, hotspot, sst, and air_temp have a moderate dispersion whereas sstanomaly and dhw are tightly compact.
+
+```{r}
+# Boxplot of barometer readings
+boxplot(cmw_merged$baro, main="Barometric Pressure Boxplot", xlab="Barometric Pressure", ylab="Pressure (mb)")
+```
+Barometric pressure (baro) has a symmetric distribution with outliers below the lower quartile. 
+
+```{r}
+# Boxplots of meteorological & water level predictors
+boxplot(subset(select(cmw_merged, c(highest, mhhw, mhw, msl, mtl, mlw, mllw, lowest))),
+        main="Water Level Boxplots",
+        xlab="Predictors",
+        ylab="Level (ft)")
+```
+
+All predictors have approximately the same dispersion, which is moderate. However, highest has a dispersion that is almost twice as large as the others. All median lines are approximately centered and evenly sized whiskers. Highest's median line is towards the top of the box, which means it is slightly left-skewed. 
+
+```{r}
+# Display the correlation matrix
+cmw_corr = cor(cmw_merged[,-1])
+cmw_corr
+```
+
+```{r}
+# Correlation Matrix
+library(corrplot)
+
+corrplot(cmw_corr, order="hclust", title="Correlation Matrix of Coral Predictors",
+         mar=c(0,0,1,0), cex.main=1)
+```
+```{r}
+library(caret)
+# Identifying the highly correlated variables
+cmw_highcorr = findCorrelation(cmw_corr, cutoff=0.75)
+cmw_highcorr
+```
+
+Correlation Matrix interpretation:
+In the above correlation matrix, apart from highest and lowest water levels, the intermediary predictors have a highly positive linear correlation between one another. Barometric pressure (baro) has almost no correlation with air temperature, degree heat week (dhw), and highest water level. Baro has a moderately negative correlation with all other predictors. Highest water level has almost no correlation with air temperature, bleaching alert area, and 7d max. Highest has a moderate to high positive correlation with all other variables. 
+
+```{r}
+# Storing Final Set as csv
+setwd("C:/Users/Rudy/Desktop/DataScience/deepseacorals/data/")
+write.csv(cmw_merged, "coral_pretrain_v2.csv")
+```
 
 
 
