@@ -5,9 +5,63 @@ Final Project: Model Training
 ```{r}
 # Import pre-training set
 setwd("C:/Users/Rudy/Desktop/DataScience/deepseacorals/data/")
-cmw_pretrain = read.csv("coral_pretrain_v2.csv")
+cmw_pretrain_v2 = read.csv("coral_pretrain_v2.csv")
+```
+```{r}
+# Packages
+library(dplyr)
+library(lubridate)
+library(caret)
+library(doParallel)
+library(lattice)
+library(pdp)
+```
+
+Our pre-training data contains 2 years of observations, which shall be split 80%/20% for training and testing, respectively. A standard train/test split method separates the data randomly. However, with time series data, we will lose any contextual information or relationship by splitting the data at random. Therefore, the data will be split using the first 19 months for training and the most recent 5 months for testing. The first 19 months accounts for approximately 3509 observations and the last 5 months accounts for approximately 877 observations.
+
+```{r}
+# Order data by date in ascending order
+cmw_asc = cmw_pretrain_v2[order(cmw_pretrain_v2$date,decreasing=FALSE),]
+
+# Split data for train/test based on time
+coral_train = cmw_asc[1:3509,]
+coral_test = tail(cmw_asc, n=877)
+
+# Create X and y train/test sets
+pred_train = subset(select(coral_train, -c(crw_baa)))
+pred_test = subset(select(coral_test, -c(crw_baa)))
+y_train = coral_train$crw_baa
+y_test = coral_test$crw_baa
+
+# Apply centering & scaling
+preProcValues = preProcess(pred_train, method = c("center", "scale"))
+preProcValuesTest = preProcess(pred_test, method = c("center", "scale"))
+
+# Predict on training data
+pred_trainTrans = predict(preProcValues, pred_train)
+pred_testTrans = predict(preProcValuesTest, pred_test)
+```
+
+The data is now ready to be used for model training. 
+
+```{r}
+# Setup parallel processing
+registerDoParallel(cores=3)
+```
+```{r}
+timeCtrl <- trainControl(method = "timeslice", initialWindow = 10, fixedWindow = FALSE, 
+                         allowParallel = TRUE)
 ```
 ```{r}
 
+gbmFit = train(y = y_train, x = pred_trainTrans,
+                    method = "gbm",
+                    trControl = timeCtrl,
+                    verbose = FALSE)
+```
+```{r}
+library(randomForest)
+
+rf = randomForest()
 ```
 
