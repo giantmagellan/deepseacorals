@@ -1,0 +1,13 @@
+Bryan Flores
+ADS-503
+Final Project: Model Training
+
+```{r}
+# Import pre-training set
+setwd("C:/Users/Rudy/Desktop/DataScience/deepseacorals/data/")
+cmw_pretrain = read.csv("coral_pretrain_v2.csv")
+```
+```{r}
+
+```
+
