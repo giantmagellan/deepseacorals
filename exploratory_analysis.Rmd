@@ -323,21 +323,6 @@ library(corrplot)
 corrplot(cmw_corr, order="hclust", title="Correlation Matrix of Coral Predictors",
          mar=c(0,0,1,0), cex.main=1)
 ```
-```{r}
-library(caret)
-# Identifying the highly correlated variables
-cmw_highcorr = findCorrelation(cmw_corr, cutoff=0.75)
-cmw_highcorr
-```
-
-Correlation Matrix interpretation:
-In the above correlation matrix, apart from highest and lowest water levels, the intermediary predictors have a highly positive linear correlation between one another. Barometric pressure (baro) has almost no correlation with air temperature, degree heat week (dhw), and highest water level. Baro has a moderately negative correlation with all other predictors. Highest water level has almost no correlation with air temperature, bleaching alert area, and 7d max. Highest has a moderate to high positive correlation with all other variables. 
-
-```{r}
-# Storing Final Set as csv
-setwd("C:/Users/Rudy/Desktop/DataScience/deepseacorals/data/")
-write.csv(cmw_merged, "coral_pretrain_v2.csv")
-```
 
 
 
