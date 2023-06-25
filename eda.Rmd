@@ -323,20 +323,23 @@ library(corrplot)
 corrplot(cmw_corr, order="hclust", title="Correlation Matrix of Coral Predictors",
          mar=c(0,0,1,0), cex.main=1)
 ```
-```{r}
-library(caret)
-# Identifying the highly correlated variables
-cmw_highcorr = findCorrelation(cmw_corr, cutoff=0.75)
-cmw_highcorr
-```
 
 Correlation Matrix interpretation:
 In the above correlation matrix, apart from highest and lowest water levels, the intermediary predictors have a highly positive linear correlation between one another. Barometric pressure (baro) has almost no correlation with air temperature, degree heat week (dhw), and highest water level. Baro has a moderately negative correlation with all other predictors. Highest water level has almost no correlation with air temperature, bleaching alert area, and 7d max. Highest has a moderate to high positive correlation with all other variables. 
 
+We use a threshold of 0.75 or -0.75 to determine highly correlated predictor variables. To reduce the issue of collinearity, we remove the field crw_baa_7d_max as it has a correlation value of 0.88036712. All other predictors live within the cutoff range.
+
+```{r}
+# Dropping highly correlated variables
+coral_pretrain_v2 = subset(select(cmw_merged, -c(crw_baa_7d_max)))
+```
+
+At this point, the three data sets, coral, water level, and meteorological have been joined so that there are 6 measurements per day -- totaling 4386 observations, 16 predictor variables, and 1 response variable (crw_baa). All highly correlated predictors have been removed from the data set and all missing values have been imputed using the exponential moving average method. The data is now ready to be split for training.
+
 ```{r}
 # Storing Final Set as csv
 setwd("C:/Users/Rudy/Desktop/DataScience/deepseacorals/data/")
-write.csv(cmw_merged, "coral_pretrain_v2.csv")
+write.csv(coral_pretrain_v2, "coral_pretrain_v2.csv")
 ```
 
 
