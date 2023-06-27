@@ -1,3 +1,8 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
 Bryan Flores
 ADS-503
 Final Project: Model Training
@@ -105,10 +110,6 @@ mape(y_test, predictions)
 ```
 
 ```{r}
-timeCtrl <- trainControl(method = "timeslice", initialWindow = 10,
-                         horizon = 1,
-                         fixedWindow = TRUE, allowParallel = FALSE)
-
 trControl <- trainControl(method = "cv",
     number = 10,
     search = "grid")
@@ -129,9 +130,46 @@ rf_default <- train(y=y_train,
 print(rf_default)
 ```
 ```{r}
+varImp(rf_default)
+```
+
+```{r}
 rf_default_pred = predict(rf_default, pred_test)
 confusionMatrix(rf_default_pred, y_test)
 ```
+```{r}
+coral_rev_tr = subset(select(coral_train, c(crw_hotspot, crw_sst, mtl, mlw, mllw)))
+coral_rev_te = subset(select(coral_test, c(crw_hotspot, crw_sst, mtl, mlw, mllw)))
+
+# Create X and y train/test sets
+pred_train = subset(select(coral_rev_tr))
+pred_test = subset(select(coral_rev_te))
+y_train = coral_train$crw_baa
+y_test = coral_test$crw_baa
+
+# Apply centering & scaling
+preProcValues = preProcess(coral_rev_tr, method = c("center", "scale"))
+preProcValuesTest = preProcess(coral_rev_te, method = c("center", "scale"))
+
+# Predict on training data
+pred_trainTrans = predict(preProcValues, coral_rev_tr)
+pred_testTrans = predict(preProcValuesTest, coral_rev_te)
+```
+
+```{r}
+# Random Forest
+# set.seed(123)
+# Run the model
+rf_rev <- train(y=y_train,
+    x=pred_trainTrans,
+    method = "rf",
+    metric = "Accuracy",
+    trControl = trControl)
+# Print the results
+print(rf_rev)
+```
+
+
 
 Due to the high accuracy rate, our model seems to be overfitting from a lack of variation and data. Additionally, it is unknown whether the 0 classifications are accurate or a default value from the system. Moreover, by adding water level measurements from a nearby source, San Juan, PR. The water level measurements have a one-to-many mapping. Therefore, there may be too many of the like-values per class. We attempt to re-train the random forest model with the following trials:  
 1.Time-dependent training and test sets excluding water level readings. 
@@ -262,6 +300,15 @@ rf_RNDnwl <- train(y=y_train_rnd_nwl,
 print(rf_RNDnwl)
 ```
 
+```{r}
+# Model Selection
+resamps = resamples(list(rf_default, 
+                       rf_noTime,  
+                       rf_nwl))
+```
+```{r}
+summary(resamps)
+```
 
 
 
