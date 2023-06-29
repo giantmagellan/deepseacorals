@@ -1,0 +1,328 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+Bryan Flores
+ADS-503
+Final Project: Model Training
+
+```{r}
+# Import pre-training set
+# setwd("C:/Users/Rudy/Desktop/DataScience/deepseacorals/data/")
+setwd("C:/Users/Bryan/OneDrive/Desktop/deepseacorals/data/")
+cmw_pretrain_v2 = read.csv("coral_pretrain_v2.csv")
+```
+```{r}
+# Packages
+library(dplyr)
+library(lubridate)
+library(caret)
+library(doParallel)
+library(lattice)
+library(pdp)
+```
+
+Our pre-training data contains 2 years of observations, which shall be split 80%/20% for training and testing, respectively. A standard train/test split method separates the data randomly. However, with time series data, we will lose any contextual information or relationship by splitting the data at random. Therefore, the data will be split using the first 19 months for training and the most recent 5 months for testing. The first 19 months accounts for approximately 3509 observations and the last 5 months accounts for approximately 877 observations.
+
+```{r}
+# Order data by date in ascending order
+cmw_asc = cmw_pretrain_v2[order(cmw_pretrain_v2$date,decreasing=FALSE),]
+cmw_asc = subset(select(cmw_asc, -c(X)))
+cmw_asc$crw_baa = as.factor(cmw_asc$crw_baa)
+
+# Split data for train/test based on time
+coral_train = cmw_asc[1:3509,]
+coral_test = tail(cmw_asc, n=877)
+
+```
+```{r}
+# Create X and y train/test sets
+pred_train = subset(select(coral_train, -c(crw_baa)))
+pred_test = subset(select(coral_test, -c(crw_baa)))
+y_train = coral_train$crw_baa
+y_test = coral_test$crw_baa
+
+# Apply centering & scaling
+preProcValues = preProcess(pred_train, method = c("center", "scale"))
+preProcValuesTest = preProcess(pred_test, method = c("center", "scale"))
+
+# Predict on training data
+pred_trainTrans = predict(preProcValues, pred_train)
+pred_testTrans = predict(preProcValuesTest, pred_test)
+```
+
+
+The data is now ready to be used for model training. 
+
+```{r}
+mape <- function(actual,pred){
+  mape <- mean(abs((actual - pred)/actual))*100
+  return (mape)
+}
+```
+```{r}
+set.seed(100)
+
+library(randomForest)
+
+# rf = randomForest(y_train ~ crw_hotspot + crw_sst + crw_sstanomaly + air_temp + baro + highest + mhhw + mhw + msl + mtl + mlw + mllw + lowest, data = pred_train)
+
+rf = randomForest(x=pred_trainTrans, y=y_train, xtest=pred_test, ytest=y_test)
+
+
+print(rf)
+summary(rf)
+```
+```{r}
+# Evaluating Model Performance
+predictions = predict(rf, newdata = pred_train)
+mape(y_train, predictions)
+
+predictions = predict(rf, newdata = pred_test)
+mape(y_test, predictions) 
+```
+```{r}
+varImpPlot(rf)
+```
+From the output above, its evident the most important variables are crw_hotspot, crw_sst, mllw, mtl, and mlw. Next is a revised random forest with just these variables.
+
+```{r}
+# Random Forest: Revised
+set.seed(100)
+
+rf_revised = randomForest(y_train ~ crw_hotspot + crw_sst + mtl + mlw + mllw, data = pred_train)
+
+print(rf_revised)
+summary(rf_revised)
+```
+```{r}
+varImpPlot(rf_revised)
+```
+
+```{r}
+# Evaluating Model Performance of Revised RF
+predictions = predict(rf_revised, newdata = pred_train)
+mape(y_train, predictions)
+
+predictions = predict(rf_revised, newdata = pred_test)
+mape(y_test, predictions) 
+```
+
+```{r}
+trControl <- trainControl(method = "cv",
+    number = 10,
+    search = "grid")
+```
+
+Removing time dependency because of small sample size.
+
+```{r}
+# Random Forest
+set.seed(1234)
+# Run the model
+rf_default <- train(y=y_train,
+    x=pred_trainTrans,
+    method = "rf",
+    metric = "Accuracy",
+    trControl = trControl)
+# Print the results
+print(rf_default)
+```
+```{r}
+varImp(rf_default)
+```
+
+```{r}
+rf_default_pred = predict(rf_default, pred_test)
+confusionMatrix(rf_default_pred, y_test)
+```
+```{r}
+coral_rev_tr = subset(select(coral_train, c(crw_hotspot, crw_sst, mtl, mlw, mllw)))
+coral_rev_te = subset(select(coral_test, c(crw_hotspot, crw_sst, mtl, mlw, mllw)))
+
+# Create X and y train/test sets
+pred_train = subset(select(coral_rev_tr))
+pred_test = subset(select(coral_rev_te))
+y_train = coral_train$crw_baa
+y_test = coral_test$crw_baa
+
+# Apply centering & scaling
+preProcValues = preProcess(coral_rev_tr, method = c("center", "scale"))
+preProcValuesTest = preProcess(coral_rev_te, method = c("center", "scale"))
+
+# Predict on training data
+pred_trainTrans = predict(preProcValues, coral_rev_tr)
+pred_testTrans = predict(preProcValuesTest, coral_rev_te)
+```
+
+```{r}
+# Random Forest
+# set.seed(123)
+# Run the model
+rf_rev <- train(y=y_train,
+    x=pred_trainTrans,
+    method = "rf",
+    metric = "Accuracy",
+    trControl = trControl)
+# Print the results
+print(rf_rev)
+```
+
+
+
+Due to the high accuracy rate, our model seems to be overfitting from a lack of variation and data. Additionally, it is unknown whether the 0 classifications are accurate or a default value from the system. Moreover, by adding water level measurements from a nearby source, San Juan, PR. The water level measurements have a one-to-many mapping. Therefore, there may be too many of the like-values per class. We attempt to re-train the random forest model with the following trials:  
+1.Time-dependent training and test sets excluding water level readings. 
+2.Randomized training and test sets including water level readings.
+3.Randomized training and test sets excluding water level readings.
+
+The hypothesis of removing time-dependency from our time series is such that the health of coral reefs, short of dying, can fluctuate between healthy and not-healthy. Therefore, the classification of the bleaching alert area can fluctuate between 0 and 4 (Bleaching Alert Level-2), in which there is severe thermal stress on corals -- potentially resulting in coral mortality (INCOIS, 2011). 
+
+```{r}
+# Exclude water level measurements from Random Forest Model Training
+# Order data by date in ascending order
+coral_nwl = cmw_pretrain_v2[order(cmw_pretrain_v2$date,decreasing=FALSE),]
+coral_nwl = subset(select(coral_nwl, -c(X, highest, mhhw, mhw, msl, mtl, mllw, mlw, lowest)))
+coral_nwl$crw_baa = as.factor(coral_nwl$crw_baa)
+
+# Split data for train/test based on time
+c_nwl_train = coral_nwl[1:3509,]
+c_nwl_test = tail(coral_nwl, n=877)
+
+```
+```{r}
+# Create X and y train/test sets
+pred_train_nwl = subset(select(c_nwl_train, -c(crw_baa)))
+pred_test_nwl = subset(select(c_nwl_test, -c(crw_baa)))
+y_train_nwl = c_nwl_train$crw_baa
+y_test_nwl = c_nwl_test$crw_baa
+
+# Apply centering & scaling
+preProcNWL = preProcess(pred_train_nwl, method = c("center", "scale"))
+preProcNWLTest = preProcess(pred_test_nwl, method = c("center", "scale"))
+
+# Predict on training data
+pred_trainTransNWL = predict(preProcNWL, pred_train_nwl)
+pred_testTransNWL = predict(preProcNWLTest, pred_test_nwl)
+```
+```{r}
+# Random Forest w/ No Water Level Data
+# Random Forest
+set.seed(1234)
+# Run the model
+rf_nwl <- train(y=y_train_nwl,
+    x=pred_trainTransNWL,
+    method = "rf",
+    metric = "Accuracy",
+    trControl = trControl)
+# Print the results
+print(rf_nwl)
+```
+
+The model is still overfitting even with the removal of the water level data. 
+
+```{r}
+# Random Forest Model Training w/ randomized train/test sets 
+## No time dependence
+coral_rnd = subset(select(cmw_pretrain_v2, -c(X, date)))
+coral_rnd$crw_baa = as.factor(coral_rnd$crw_baa)
+coral_rnd_x = subset(select(coral_rnd, -c(crw_baa)))
+
+# Split data for train/test using CreateDataPartition
+training = createDataPartition(coral_rnd$crw_baa, p=0.8, list=FALSE)
+
+```
+```{r}
+# Create X and y train/test sets
+c_rnd_train = coral_rnd[training, ]
+c_rnd_test = coral_rnd[-training, ]
+y_train_rn = coral_rnd$crw_baa[training]
+y_test_rn = coral_rnd$crw_baa[-training]
+
+# Apply centering & scaling
+preProcRND = preProcess(c_rnd_train, method = c("center", "scale"))
+preProcRNDTest = preProcess(c_rnd_test, method = c("center", "scale"))
+
+# Predict on training data
+pred_trainTransRND = predict(preProcRND, c_rnd_train)
+pred_testTransRND = predict(preProcRNDTest, c_rnd_test)
+```
+```{r}
+# Random Forest w/ No time dependence
+# Random Forest
+set.seed(1234)
+# Run the model
+rf_noTime <- train(y=y_train_rn,
+    x=pred_trainTransRND,
+    method = "rf",
+    metric = "Accuracy",
+    trControl = trControl)
+# Print the results
+print(rf_noTime)
+```
+```{r}
+# Random Forest Model Training w/ randomized train/test sets 
+## No time dependence or water level
+coral_rnd_nwl = subset(select(cmw_pretrain_v2, -c(X, date, highest, mhhw, mhw, 
+                                              msl, mtl, mllw, mlw, lowest)))
+coral_rnd_nwl$crw_baa = as.factor(coral_rnd_nwl$crw_baa)
+
+# Split data for train/test using CreateDataPartition
+training = createDataPartition(coral_rnd_nwl$crw_baa, p=0.8, list=FALSE)
+
+```
+```{r}
+# Create X and y train/test sets
+c_rnd_nwl_train = coral_rnd_nwl[training, ]
+c_rnd_nwl_test = coral_rnd_nwl[-training, ]
+y_train_rnd_nwl = coral_rnd_nwl$crw_baa[training]
+y_test_rnd_nwl = coral_rnd_nwl$crw_baa[-training]
+
+# Apply centering & scaling
+preProcRNDnwl = preProcess(c_rnd_nwl_train, method = c("center", "scale"))
+preProcRNDnwlTest = preProcess(c_rnd_nwl_test, method = c("center", "scale"))
+
+# Predict on training data
+pred_trainTransRNDnwl = predict(preProcRNDnwl, c_rnd_nwl_train)
+pred_testTransRNDnwl = predict(preProcRNDnwlTest, c_rnd_nwl_test)
+```
+```{r}
+# Random Forest w/ No time dependence
+# Random Forest
+set.seed(1234)
+# Run the model
+rf_RNDnwl <- train(y=y_train_rnd_nwl,
+    x=pred_trainTransRNDnwl,
+    method = "rf",
+    metric = "Accuracy",
+    trControl = trControl)
+# Print the results
+print(rf_RNDnwl)
+```
+
+```{r}
+# Model Selection
+resamps = resamples(list(rf_default, 
+                       rf_noTime,  
+                       rf_nwl))
+```
+```{r}
+summary(resamps)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
